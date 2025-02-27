@@ -5,6 +5,8 @@ const talkBtn = document.getElementById("talkBtn");
 const talkContainer = document.getElementById("talk-container");
 const recentlyJoinedList = document.getElementById("recentlyJoined");
 const beepSound = document.getElementById("beepSound");
+const talkieSound = document.getElementById("talkieSound");
+const connectSound = document.getElementById("connectSound");
 
 // Sidebar Elements
 const toggleBtn = document.getElementById("toggleBtn");
@@ -25,6 +27,22 @@ function playBeepSound() {
     if (beepSound) {
         beepSound.currentTime = 0;
         beepSound.play().catch(err => console.warn("Beep sound play error:", err));
+    }
+}
+
+// Play Talkie Sound on Sender's Device
+function playTalkieSound() {
+    if (talkieSound) {
+        talkieSound.currentTime = 0;
+        talkieSound.play().catch(err => console.warn("Talkie sound play error:", err));
+    }
+}
+
+// Play Connect Sound
+function playConnectSound() {
+    if (connectSound) {
+        connectSound.currentTime = 0;
+        connectSound.play().catch(err => console.warn("Connect sound play error:", err));
     }
 }
 
@@ -63,8 +81,8 @@ function addUserToRecentlyJoined(user) {
     li.dataset.username = user.username;
     li.innerHTML = `
         <span class="font-medium">${user.username}</span>
-        <span class="${user.online ? 'text-green-400' : 'text-red-400'}">
-            ${user.online ? "Online" : "Offline"}
+        <span class="${user.online ? 'wave' : 'text-red-400'}">
+            ${user.online ? "" : "Offline"}
         </span>
         <button class="talkBtn bg-blue-500 px-3 py-1 rounded text-white text-sm hover:bg-blue-600 transition"
             data-username="${user.username}" ${!user.online ? 'disabled' : ''}>
@@ -92,9 +110,9 @@ function handleRecordingStatus(user, isRecording) {
     if (userElement) {
         const statusText = userElement.querySelector("span:nth-child(2)");
         if (statusText) {
-            statusText.textContent = isRecording ? "Recording... 🎤" : "Online";
+            statusText.textContent = isRecording ? "Recording... 🎤" : "";
             statusText.classList.toggle("text-yellow-400", isRecording);
-            statusText.classList.toggle("text-green-400", !isRecording);
+            statusText.classList.toggle("wave", !isRecording);
         }
     }
 }
@@ -189,7 +207,10 @@ connectBtn.addEventListener("click", () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
-    }).then(() => connectToServer());
+    }).then(() => {
+        playConnectSound();
+        connectToServer();
+    });
 });
 
 function updateUIOnConnect() {
@@ -236,4 +257,3 @@ talkBtn.addEventListener("mouseup", () => {
     talkBtn.textContent = "🎤 Hold to Talk";
     talkBtn.classList.remove("bg-red-500");
 });
-

@@ -129,3 +129,31 @@ body {
     animation: dot-flash 1.5s infinite steps(5);
 }
 
+@keyframes water-wave {
+    0% {
+        transform: scale(0.8);
+        opacity: 1;
+        box-shadow: 0 0 5px rgba(0, 128, 0, 0.5);
+    }
+    50% {
+        transform: scale(1.5);
+        opacity: 0.6;
+        box-shadow: 0 0 15px rgba(0, 128, 0, 0.3);
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+        box-shadow: 0 0 25px rgba(0, 128, 0, 0);
+    }
+}
+
+.wave {
+    position: relative;
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    background-color: green;
+    border-radius: 50%;
+    animation: water-wave 2s infinite ease-out;
+}
+

@@ -19,6 +19,9 @@
             <li><a href="#" id="myFriendsLink" class="block py-2 px-4 hover:bg-gray-700 rounded-md">My Friends</a></li>
             <li><a href="#" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Search Friends</a></li>
             <li><a href="#" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Recently Joined</a></li>
+            <li><a href="#" id="joinTalkieBtn" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Join Talkie</a></li>
+            <li><a href="#" id="myTalkieRoomBtn" class="block py-2 px-4 hover:bg-gray-700 rounded-md">My Talkie Room</a></li>
+            <li><a href="#" id="leaveTalkieBtn" class="block py-2 px-4 hover:bg-red-700 rounded-md">Leave Talkie</a></li>
         </ul>
     </nav>
 
@@ -59,19 +62,17 @@
             </div>
 
             <!-- Recently Joined Users -->
-           <!-- Recently Joined Users -->
-<h2 class="text-xl font-semibold mt-8 text-center">Recently Joined</h2>
-<div class="mt-4 w-full max-w-lg">
-    <div class="flex justify-between bg-gray-700 px-4 py-2 rounded-t-lg text-white font-semibold">
-        <span>UserName</span>
-        <span>Status</span>
-        <span>Action</span>
-    </div>
-    <ul id="recentlyJoined" class="divide-y divide-gray-600">
-        <!-- Users will be dynamically added -->
-    </ul>
-</div>
-
+            <h2 class="text-xl font-semibold mt-8 text-center">Recently Joined</h2>
+            <div class="mt-4 w-full max-w-lg">
+                <div class="flex justify-between bg-gray-700 px-4 py-2 rounded-t-lg text-white font-semibold">
+                    <span>UserName</span>
+                    <span>Status</span>
+                    <span>Action</span>
+                </div>
+                <ul id="recentlyJoined" class="divide-y divide-gray-600">
+                    <!-- Users will be dynamically added -->
+                </ul>
+            </div>
         </section>
 
         <!-- Friends List (Hidden Initially) -->
@@ -84,8 +85,9 @@
     </div>
 
     <audio id="beepSound" src="audio/badoop.mp3" preload="auto"></audio>
+    <audio id="talkieSound" src="audio/connection_lost.mp3" preload="auto"></audio>
+    <audio id="connectSound" src="audio/connect.mp3" preload="auto"></audio>
 
     <script src="script.js"></script>
 </body>
-
 </html>
