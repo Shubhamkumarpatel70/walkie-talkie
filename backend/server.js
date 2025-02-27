@@ -4,37 +4,36 @@ const path = require("path");
 const express = require("express");
 
 const app = express();
-const PORT = process.env.PORT || 8080; // Use dynamic port for deployment
+const PORT = process.env.PORT || 8080;
 
-let clients = {}; // Store WebSocket connections by username
-let onlineUsers = []; // Array to track online users
-const userFilePath = path.join(__dirname, "data", "userrequest.json"); // Path to user request JSON file
+let clients = {}; // Store WebSocket connections
+let onlineUsers = []; // Track online users
+const userFilePath = path.join(__dirname, "data", "userrequest.json");
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, "../frontend"))); // Serve static files from frontend
+app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Load existing users from userrequest.json
+// Load users from JSON file
 function loadUsers() {
     if (fs.existsSync(userFilePath)) {
-        const data = fs.readFileSync(userFilePath);
-        onlineUsers = JSON.parse(data);
-        onlineUsers.forEach((user) => {
-            clients[user] = null; // Initialize client entries for loaded users
-        });
+        try {
+            onlineUsers = JSON.parse(fs.readFileSync(userFilePath));
+            onlineUsers.forEach(user => (clients[user] = null)); // Initialize empty client sockets
+        } catch (error) {
+            console.error("Error loading user data:", error);
+        }
     }
 }
 
-// Save users to userrequest.json
+// Save users to JSON file
 function saveUsers() {
     fs.writeFileSync(userFilePath, JSON.stringify(onlineUsers, null, 2));
 }
 
-// Endpoint to save username
+// API to save a new username
 app.post("/save-username", (req, res) => {
     const { username } = req.body;
-    if (!username) {
-        return res.status(400).json({ error: "Username is required" });
-    }
+    if (!username) return res.status(400).json({ error: "Username is required" });
 
     if (!onlineUsers.includes(username)) {
         onlineUsers.push(username);
@@ -44,34 +43,32 @@ app.post("/save-username", (req, res) => {
     res.json({ message: "Username saved successfully" });
 });
 
-// Endpoint to get the list of recently joined users
+// API to get recently joined users
 app.get("/recently-joined", (req, res) => {
     res.json(onlineUsers);
 });
 
-// Serve the index.html file for the root URL
+// Serve index.html
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "../frontend/index.html"));
 });
 
-// Start the Express server
+// Start Express server
 const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(
-        `WebSocket server running on ${
-            process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com` : `ws://localhost:${PORT}`
-        }`
-    );
+    console.log(`WebSocket running at ${
+        process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com` : `ws://localhost:${PORT}`
+    }`);
 });
 
-// Attach WebSocket to the existing Express server
+// Attach WebSocket to the server
 const wss = new WebSocket.Server({ server, path: "/ws" });
 
-// Broadcast function to send messages to all clients except the sender
-function broadcast(data, sender) {
-    Object.keys(clients).forEach((user) => {
-        if (clients[user]?.readyState === WebSocket.OPEN && user !== sender) {
-            clients[user].send(JSON.stringify(data));
+// Broadcast messages to all connected clients except the sender
+function broadcast(data, sender = null) {
+    Object.entries(clients).forEach(([user, client]) => {
+        if (client && client.readyState === WebSocket.OPEN && user !== sender) {
+            client.send(JSON.stringify(data));
         }
     });
 }
@@ -85,61 +82,55 @@ wss.on("connection", (ws) => {
 
             // Handle user joining
             if (data.type === "join") {
-                username = data.username; // Store username for the session
-
-                if (clients[username]) {
-                    // If username already exists, reject the connection
-                    ws.send(
-                        JSON.stringify({ type: "error", message: "Username already taken." })
-                    );
+                username = data.username.trim();
+                if (!username || clients[username]) {
+                    ws.send(JSON.stringify({ type: "error", message: "Username already taken." }));
                     ws.close();
                     return;
                 }
 
-                clients[username] = ws; // Associate username with WebSocket connection
-                onlineUsers.push(username); // Add user to online users
-                console.log(`${username} joined`);
-
-                // Save the updated online users list to the JSON file
+                clients[username] = ws;
+                onlineUsers.push(username);
                 saveUsers();
 
-                // Notify other users that this user has joined
-                broadcast({ type: "user_joined", username });
-                broadcast({ type: "user_list", users: onlineUsers }); // Send updated user list
+                console.log(`${username} joined`);
 
-                // Send the current list of online users to the newly connected user
+                // Notify others about the new user
+                broadcast({ type: "user_joined", username });
+                broadcast({ type: "user_list", users: onlineUsers });
+
+                // Send the updated user list to the new user
                 ws.send(JSON.stringify({ type: "user_list", users: onlineUsers }));
             }
 
             // Handle audio message
-            else if (data.type === "audio") {
-                console.log(`Received audio from ${username}`);
-                broadcast(data, username); // Broadcast audio data to all clients except the sender
+            else if (data.type === "audio" && username) {
+                console.log(`Audio received from ${username}`);
+                broadcast({ type: "audio", audio: data.audio, username }, username);
             }
         } catch (error) {
-            console.error("Error processing message:", error);
+            console.error("Message processing error:", error);
         }
     });
 
-    ws.on("close", (event) => {
+    ws.on("close", () => {
         if (username) {
-            delete clients[username]; // Remove the user from the clients list
-            onlineUsers = onlineUsers.filter((user) => user !== username); // Remove user from online users
-            console.log(`${username} disconnected: ${event.reason}`);
-
-            // Save the updated online users list to the JSON file
+            delete clients[username];
+            onlineUsers = onlineUsers.filter(user => user !== username);
             saveUsers();
 
-            // Notify other users that this user has left
+            console.log(`${username} disconnected`);
+
+            // Notify others that the user left
             broadcast({ type: "user_left", username });
-            broadcast({ type: "user_list", users: onlineUsers }); // Send updated user list
+            broadcast({ type: "user_list", users: onlineUsers });
         }
     });
 
     ws.on("error", (error) => {
-        console.error(`WebSocket error for user ${username}:`, error);
+        console.error(`WebSocket error for ${username}:`, error);
     });
 });
 
-// Load users when the server starts
+// Load users on startup
 loadUsers();

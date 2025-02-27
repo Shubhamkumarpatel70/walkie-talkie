@@ -6,8 +6,9 @@ const talkContainer = document.getElementById("talk-container");
 const recentlyJoinedList = document.getElementById("recentlyJoined");
 const beepSound = document.getElementById("beepSound");
 
-let ws, mediaRecorder, audioChunks = [], username = "";
+let ws, mediaRecorder, audioChunks = [], username = "", reconnectTimeout;
 
+// Connect Button Click Handler
 connectBtn.addEventListener("click", () => {
     username = usernameInput.value.trim();
     if (!username) {
@@ -18,13 +19,19 @@ connectBtn.addEventListener("click", () => {
 });
 
 function connectToServer() {
-    const ws = new WebSocket(
-        window.location.hostname === "localhost"
-          ? "ws://localhost:8080"
-          : "wss://walkie-talkie-3i76.onrender.com"
-      );      
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        console.log("Already connected to WebSocket.");
+        return;
+    }
+
+    const wsUrl = window.location.hostname === "localhost"
+        ? "ws://localhost:8080/ws"
+        : "wss://walkie-talkie-3i76.onrender.com/ws";  
+
+    ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
+        console.log("Connected to WebSocket");
         ws.send(JSON.stringify({ type: "join", username }));
         status.textContent = `Connected as ${username} ✅`;
         status.classList.replace("text-yellow-400", "text-green-400");
@@ -33,47 +40,73 @@ function connectToServer() {
         talkContainer.classList.remove("hidden");
     };
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+        console.warn("WebSocket closed:", event.reason);
         status.textContent = "Disconnected ❌";
         status.classList.replace("text-green-400", "text-red-400");
+
+        // Attempt to reconnect after 5 seconds
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = setTimeout(connectToServer, 5000);
     };
 
-    // Add the message event handler here
+    ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+    };
+
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === "audio") {
-            playAudio(data.audio);
-        } else if (data.type === "user_joined") {
-            console.log(`${data.username} has joined.`);
-            addUserToRecentlyJoined(data.username); // Update the UI
-        } else if (data.type === "user_left") {
-            console.log(`${data.username} has left.`);
-            removeUserFromRecentlyJoined(data.username); // Update the UI
-        } else if (data.type === "user_list") {
-            updateRecentlyJoinedList(data.users); // Update list when other users connect/disconnect
+        try {
+            const data = JSON.parse(event.data);
+
+            switch (data.type) {
+                case "audio":
+                    playAudio(data.audio);
+                    break;
+                case "user_joined":
+                    addUserToRecentlyJoined(data.username);
+                    break;
+                case "user_left":
+                    removeUserFromRecentlyJoined(data.username);
+                    break;
+                case "user_list":
+                    updateRecentlyJoinedList(data.users);
+                    break;
+                default:
+                    console.warn("Unknown message type:", data);
+            }
+        } catch (error) {
+            console.error("Error parsing message:", error);
         }
     };
 }
 
+// Handle Talk Button (Start Recording)
 talkBtn.addEventListener("mousedown", async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    
-    mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-    };
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-        sendAudio(audioBlob);
+        mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-    };
 
-    mediaRecorder.start();
-    talkBtn.textContent = "Recording... 🎤";
-    talkBtn.classList.add("bg-red-500");
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            sendAudio(audioBlob);
+        };
+
+        mediaRecorder.start();
+        talkBtn.textContent = "Recording... 🎤";
+        talkBtn.classList.add("bg-red-500");
+    } catch (error) {
+        console.error("Microphone access error:", error);
+        alert("Microphone access is required to use the Walkie-Talkie feature.");
+    }
 });
 
+// Handle Talk Button Release (Stop Recording)
 talkBtn.addEventListener("mouseup", () => {
     if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
@@ -82,7 +115,13 @@ talkBtn.addEventListener("mouseup", () => {
     }
 });
 
+// Send Audio Data to WebSocket
 function sendAudio(blob) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.warn("WebSocket is not connected. Cannot send audio.");
+        return;
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = () => {
@@ -90,48 +129,52 @@ function sendAudio(blob) {
     };
 }
 
+// Play Received Audio
 function playAudio(audioData) {
     const audio = new Audio(audioData);
-    audio.play();
+    audio.play().catch((error) => {
+        console.error("Audio playback error:", error);
+    });
 }
 
-// Function to play the beep sound
+// Play Beep Sound on "Talk" Button Click
 function playBeepSound() {
-    beepSound.play();
+    if (beepSound) {
+        beepSound.play();
+    }
 }
 
-// Functions to update the UI for user joins and leaves
-function addUserToRecentlyJoined(username) {
-    const li = document.createElement('li');
+// Update UI When a User Joins
+function addUserToRecentlyJoined(user) {
+    if (!user) return;
+
+    // Check if user already exists in the list
+    if ([...recentlyJoinedList.children].some(li => li.dataset.username === user)) return;
+
+    const li = document.createElement("li");
     li.className = "flex items-center justify-between p-2 bg-gray-800 rounded-md";
+    li.dataset.username = user;
     li.innerHTML = `
-        <span>${username} - Connected</span>
+        <span>${user} - Connected</span>
         <span class="flex items-center">
             <span class="dot online"></span>
-            <button class="talkBtn bg-blue-500 px-2 py-1 rounded ml-2" data-username="${username}">Talk</button>
+            <button class="talkBtn bg-blue-500 px-2 py-1 rounded ml-2" data-username="${user}">Talk</button>
         </span>
     `;
     recentlyJoinedList.appendChild(li);
 
-    // Add event listener to the "Talk" button
-    const talkBtn = li.querySelector('.talkBtn');
-    talkBtn.addEventListener('click', () => {
-        playBeepSound(); // Play beep sound when the Talk button is clicked
-    });
+    // Add Event Listener for "Talk" Button
+    li.querySelector(".talkBtn").addEventListener("click", playBeepSound);
 }
 
-function removeUserFromRecentlyJoined(username) {
-    const listItems = recentlyJoinedList.querySelectorAll('li');
-    listItems.forEach(item => {
-        if (item.textContent.includes(username)) {
-            recentlyJoinedList.removeChild(item);
-        }
-    });
+// Remove User from List When They Leave
+function removeUserFromRecentlyJoined(user) {
+    const item = [...recentlyJoinedList.children].find(li => li.dataset.username === user);
+    if (item) recentlyJoinedList.removeChild(item);
 }
 
+// Update the Recently Joined Users List
 function updateRecentlyJoinedList(users) {
-    recentlyJoinedList.innerHTML = ''; // Clear the current list
-    users.forEach(user => {
-        addUserToRecentlyJoined(user); // Add each user to the list
-    });
+    recentlyJoinedList.innerHTML = ""; // Clear current list
+    users.forEach(user => addUserToRecentlyJoined(user));
 }
