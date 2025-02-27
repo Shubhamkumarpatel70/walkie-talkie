@@ -1,43 +1,131 @@
-/* styles.css */
-
+/* General Styles */
 body {
     font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #121212;
+    color: #ffffff;
 }
 
+/* Sidebar Styles */
 #sidebar {
     z-index: 1000; /* Ensure sidebar is on top */
+    transition: transform 0.3s ease-in-out;
+    background-color: #1e1e1e;
+    width: 250px;
+    height: 100vh;
+    padding: 1rem;
+    position: fixed;
+    left: 0;
+    top: 0;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
 }
 
+/* Overlay Styles */
 #overlay {
-    z-index: 500; /* Ensure overlay is below the sidebar */
+    z-index: 500;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
 }
 
+/* Dot Status Indicators */
 .dot {
-    width: 10px;
-    height: 10px;
+    width: 0.625rem; /* 10px */
+    height: 0.625rem;
     border-radius: 50%;
-    margin-left: 5px;
-    animation: pulse 1.5s infinite;
+    margin-left: 0.3rem;
+    display: inline-block;
 }
 
+/* Online User Indicator */
 .online {
-    background-color: green;
+    background-color: #28a745;
+    animation: pulse 1.5s infinite ease-in-out;
 }
 
+/* Offline User Indicator */
 .offline {
-    background-color: red;
+    background-color: #dc3545;
     animation: none; /* No pulse effect for offline */
 }
 
 /* Pulse animation for online users */
 @keyframes pulse {
-    0% {
+    0%, 100% {
         transform: scale(1);
+        opacity: 1;
     }
     50% {
-        transform: scale(1.5);
-    }
-    100% {
-        transform: scale(1);
+        transform: scale(1.3);
+        opacity: 0.7;
     }
 }
+
+/* Recently Joined User List */
+#recentlyJoined {
+    list-style: none;
+    padding: 0;
+    margin-top: 1rem;
+}
+
+#recentlyJoined li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #2a2a2a;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    border-radius: 5px;
+}
+
+/* Talk Button */
+.talkBtn {
+    background-color: #007bff;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.talkBtn:hover {
+    background-color: #0056b3;
+}
+
+.talkBtn:disabled {
+    background-color: #555;
+    cursor: not-allowed;
+}
+
+/* Connect Status */
+#status {
+    font-weight: bold;
+    margin-top: 0.5rem;
+}
+
+/* Utility Classes */
+.hidden {
+    display: none;
+}
+
+/* Connecting Dots Animation */
+@keyframes dot-flash {
+    0% { opacity: 0; }
+    25% { opacity: 1; }
+    50% { opacity: 0; }
+    75% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.dots::after {
+    content: '.....';
+    /*Defaultcontent*/display: inline-block;
+    animation: dot-flash 1.5s infinite steps(5);
+}
+

@@ -57,7 +57,7 @@ app.get("/", (req, res) => {
 const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`WebSocket running at ${
-        process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com` : `ws://localhost:${PORT}`
+        process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com/ws` : `ws://localhost:${PORT}`
     }`);
 });
 
@@ -103,10 +103,29 @@ wss.on("connection", (ws) => {
                 ws.send(JSON.stringify({ type: "user_list", users: onlineUsers }));
             }
 
-            // Handle audio message
+            // Handle audio message (with Recording Status)
             else if (data.type === "audio" && username) {
                 console.log(`Audio received from ${username}`);
+
+                // Notify clients that this user is speaking
+                broadcast({ type: "recording", username, status: true });
+
                 broadcast({ type: "audio", audio: data.audio, username }, username);
+
+                // After a short delay, reset the user's status
+                setTimeout(() => {
+                    broadcast({ type: "recording", username, status: false });
+                }, 3000); // Adjust time as needed
+            }
+
+            // Handle "ring" event
+            else if (data.type === "ring" && data.to) {
+                if (clients[data.to] && clients[data.to].readyState === WebSocket.OPEN) {
+                    clients[data.to].send(JSON.stringify({ type: "ring", from: data.from, to: data.to }));
+                    console.log(`Ring event sent from ${data.from} to ${data.to}`);
+                } else {
+                    console.log(`Ring event failed: ${data.to} is not online.`);
+                }
             }
         } catch (error) {
             console.error("Message processing error:", error);
