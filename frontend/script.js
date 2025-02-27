@@ -17,7 +17,7 @@ let ws, mediaRecorder, audioChunks = [], username = "", reconnectTimeout, connec
 // Play Beep Sound on Receiver's Device
 function playBeepSound() {
     if (beepSound) {
-        beepSound.currentTime = 0; // Reset to start
+        beepSound.currentTime = 0;
         beepSound.play().catch(err => console.warn("Beep sound play error:", err));
     }
 }
@@ -48,7 +48,12 @@ function stopConnectingDots() {
 // Update Recently Joined Users
 function updateRecentlyJoined(users) {
     recentlyJoinedList.innerHTML = "";
+
     users.forEach(user => {
+        if (!user || !user.username) return;
+
+        if ([...recentlyJoinedList.children].some(li => li.dataset.username === user.username)) return;
+
         const li = document.createElement("li");
         li.className = "flex justify-between items-center px-4 py-2 bg-gray-800 rounded-md";
         li.dataset.username = user.username;
@@ -62,13 +67,40 @@ function updateRecentlyJoined(users) {
                 Talk
             </button>
         `;
+
         recentlyJoinedList.appendChild(li);
 
-        // Add click event to send ring request
         li.querySelector(".talkBtn").addEventListener("click", () => {
             sendRingRequest(user.username);
         });
     });
+}
+
+// Handle Recording Status
+function handleRecordingStatus(user, isRecording) {
+    const userElement = recentlyJoinedList.querySelector(`[data-username="${user}"]`);
+    if (userElement) {
+        const statusText = userElement.querySelector("span:nth-child(2)");
+        if (statusText) {
+            statusText.textContent = isRecording ? "Recording... 🎤" : "Online ✅";
+            statusText.classList.toggle("text-yellow-400", isRecording);
+            statusText.classList.toggle("text-green-400", !isRecording);
+        }
+    }
+}
+
+// Fetch users from the server and update UI
+async function fetchRecentlyJoined() {
+    try {
+        const response = await fetch("/get-users");
+        const data = await response.json();
+
+        if (data.users && Array.isArray(data.users)) {
+            updateRecentlyJoined(data.users.map(user => ({ username: user, online: true })));
+        }
+    } catch (error) {
+        console.error("Error fetching recently joined users:", error);
+    }
 }
 
 // Connect to WebSocket
@@ -96,7 +128,6 @@ function connectToServer() {
         status.textContent = "Disconnected ❌";
         status.classList.replace("text-green-400", "text-red-400");
 
-        // Attempt to reconnect after 5 seconds
         clearTimeout(reconnectTimeout);
         reconnectTimeout = setTimeout(connectToServer, 5000);
     };
@@ -119,12 +150,17 @@ function connectToServer() {
                     removeUserFromRecentlyJoined(data.username);
                     break;
                 case "user_list":
-                    updateRecentlyJoined(data.users);
+                    if (Array.isArray(data.users)) {
+                        updateRecentlyJoined(data.users.filter(u => u?.username));
+                    }
                     break;
                 case "ring":
                     if (data.to === username) {
                         playBeepSound();
                     }
+                    break;
+                case "recording":
+                    handleRecordingStatus(data.username, data.status);
                     break;
                 default:
                     console.warn("Unknown message type:", data);
@@ -143,7 +179,6 @@ connectBtn.addEventListener("click", () => {
         return;
     }
     
-    // Save username on server
     fetch('/save-username', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,9 +214,12 @@ talkBtn.addEventListener("mousedown", async () => {
         mediaRecorder.start();
         talkBtn.textContent = "Recording... 🎤";
         talkBtn.classList.add("bg-red-500");
+
+        ws.send(JSON.stringify({ type: "recording", username, status: true }));
+
     } catch (error) {
         console.error("Microphone access error:", error);
-        alert("Microphone access is required to use the Walkie-Talkie feature.");
+        alert("Microphone access is required.");
     }
 });
 
@@ -191,30 +229,10 @@ talkBtn.addEventListener("mouseup", () => {
         mediaRecorder.stop();
         talkBtn.textContent = "🎤 Hold to Talk";
         talkBtn.classList.remove("bg-red-500");
+
+        ws.send(JSON.stringify({ type: "recording", username, status: false }));
     }
 });
-
-// Send Audio Data to WebSocket
-function sendAudio(blob) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("WebSocket is not connected. Cannot send audio.");
-        return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(blob);
-    reader.onloadend = () => {
-        ws.send(JSON.stringify({ type: "audio", audio: reader.result, username }));
-    };
-}
-
-// Play Received Audio
-function playAudio(audioData) {
-    const audio = new Audio(audioData);
-    audio.play().catch((error) => {
-        console.error("Audio playback error:", error);
-    });
-}
 
 // Sidebar Toggle
 [toggleBtn, closeBtn, overlay].forEach(el => el.addEventListener("click", () => {
@@ -222,20 +240,8 @@ function playAudio(audioData) {
     overlay.classList.toggle("hidden");
 }));
 
-// Load Username from Local Storage
 window.addEventListener("load", () => {
     const storedUsername = localStorage.getItem("username");
     if (storedUsername) usernameInput.value = storedUsername;
+    fetchRecentlyJoined();
 });
-
-// Update UI When a User Joins
-function addUserToRecentlyJoined(user) {
-    if (!user || [...recentlyJoinedList.children].some(li => li.dataset.username === user)) return;
-    updateRecentlyJoined([{ username: user, online: true }]);
-}
-
-// Remove User from List When They Leave
-function removeUserFromRecentlyJoined(user) {
-    const item = [...recentlyJoinedList.children].find(li => li.dataset.username === user);
-    if (item) item.remove();
-}

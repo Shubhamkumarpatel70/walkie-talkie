@@ -6,46 +6,71 @@ const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-let clients = {}; // Store WebSocket connections
-let onlineUsers = []; // Track online users
+let clients = {}; // Store active WebSocket connections
+let onlineUsers = new Set(); // Track currently online users
+
 const userFilePath = path.join(__dirname, "data", "userrequest.json");
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "../frontend")));
 
-// Load users from JSON file
+// Load users from JSON file (with error handling)
 function loadUsers() {
     if (fs.existsSync(userFilePath)) {
         try {
-            onlineUsers = JSON.parse(fs.readFileSync(userFilePath));
-            onlineUsers.forEach(user => (clients[user] = null)); // Initialize empty client sockets
+            const users = JSON.parse(fs.readFileSync(userFilePath, "utf8"));
+            if (Array.isArray(users)) {
+                onlineUsers = new Set(users);
+            }
         } catch (error) {
             console.error("Error loading user data:", error);
+            onlineUsers = new Set();
         }
     }
 }
 
-// Save users to JSON file
+// Save users to JSON file safely
 function saveUsers() {
-    fs.writeFileSync(userFilePath, JSON.stringify(onlineUsers, null, 2));
+    try {
+        fs.writeFileSync(userFilePath, JSON.stringify([...onlineUsers], null, 2));
+    } catch (error) {
+        console.error("Error saving user data:", error);
+    }
 }
 
 // API to save a new username
 app.post("/save-username", (req, res) => {
     const { username } = req.body;
-    if (!username) return res.status(400).json({ error: "Username is required" });
+    if (!username || typeof username !== "string" || !username.trim()) {
+        return res.status(400).json({ error: "Valid username is required" });
+    }
 
-    if (!onlineUsers.includes(username)) {
-        onlineUsers.push(username);
+    if (!onlineUsers.has(username.trim())) {
+        onlineUsers.add(username.trim());
         saveUsers();
     }
 
     res.json({ message: "Username saved successfully" });
 });
 
+// API to fetch users from userrequest.json
+app.get("/get-users", (req, res) => {
+    try {
+        if (!fs.existsSync(userFilePath)) {
+            return res.json({ users: [] }); // Return empty array if file doesn't exist
+        }
+
+        const users = JSON.parse(fs.readFileSync(userFilePath, "utf8"));
+        res.json({ users: Array.isArray(users) ? users : [] });
+    } catch (error) {
+        console.error("Error fetching user data:", error);
+        res.status(500).json({ error: "Failed to retrieve users." });
+    }
+});
+
 // API to get recently joined users
 app.get("/recently-joined", (req, res) => {
-    res.json(onlineUsers);
+    res.json([...onlineUsers]);
 });
 
 // Serve index.html
@@ -56,8 +81,8 @@ app.get("/", (req, res) => {
 // Start Express server
 const server = app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    console.log(`WebSocket running at ${
-        process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com/ws` : `ws://localhost:${PORT}`
+    console.log(`WebSocket available at ${
+        process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com/ws` : `ws://localhost:${PORT}/ws`
     }`);
 });
 
@@ -73,6 +98,7 @@ function broadcast(data, sender = null) {
     });
 }
 
+// WebSocket Handling
 wss.on("connection", (ws) => {
     let username = null;
 
@@ -83,39 +109,53 @@ wss.on("connection", (ws) => {
             // Handle user joining
             if (data.type === "join") {
                 username = data.username.trim();
-                if (!username || clients[username]) {
+
+                if (!username) {
+                    ws.send(JSON.stringify({ type: "error", message: "Invalid username." }));
+                    ws.close();
+                    return;
+                }
+
+                if (clients[username]) {
                     ws.send(JSON.stringify({ type: "error", message: "Username already taken." }));
                     ws.close();
                     return;
                 }
 
                 clients[username] = ws;
-                onlineUsers.push(username);
+                onlineUsers.add(username);
                 saveUsers();
 
                 console.log(`${username} joined`);
 
-                // Notify others about the new user
+                // Notify all users about the new user
                 broadcast({ type: "user_joined", username });
-                broadcast({ type: "user_list", users: onlineUsers });
 
-                // Send the updated user list to the new user
-                ws.send(JSON.stringify({ type: "user_list", users: onlineUsers }));
+                // Send the updated user list to all
+                const userList = [...onlineUsers];
+                broadcast({ type: "user_list", users: userList });
+                ws.send(JSON.stringify({ type: "user_list", users: userList }));
             }
 
-            // Handle audio message (with Recording Status)
+            // Handle audio message (with recording status)
             else if (data.type === "audio" && username) {
                 console.log(`Audio received from ${username}`);
+
+                if (!data.audio) {
+                    console.warn("Empty audio data received.");
+                    return;
+                }
 
                 // Notify clients that this user is speaking
                 broadcast({ type: "recording", username, status: true });
 
+                // Send the audio to all clients except sender
                 broadcast({ type: "audio", audio: data.audio, username }, username);
 
                 // After a short delay, reset the user's status
                 setTimeout(() => {
                     broadcast({ type: "recording", username, status: false });
-                }, 3000); // Adjust time as needed
+                }, 3000);
             }
 
             // Handle "ring" event
@@ -135,14 +175,16 @@ wss.on("connection", (ws) => {
     ws.on("close", () => {
         if (username) {
             delete clients[username];
-            onlineUsers = onlineUsers.filter(user => user !== username);
+            onlineUsers.delete(username);
             saveUsers();
 
             console.log(`${username} disconnected`);
 
             // Notify others that the user left
             broadcast({ type: "user_left", username });
-            broadcast({ type: "user_list", users: onlineUsers });
+
+            // Send updated user list to all clients
+            broadcast({ type: "user_list", users: [...onlineUsers] });
         }
     });
 
