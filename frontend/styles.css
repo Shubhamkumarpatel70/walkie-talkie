@@ -19,6 +19,13 @@ body {
     left: 0;
     top: 0;
     box-shadow: 2px 0 10px rgba(0, 0, 0, 0.3);
+    transform: translateX(-100%);
+}
+
+@media (min-width: 640px) {
+    #sidebar {
+        transform: translateX(0);
+    }
 }
 
 /* Overlay Styles */
@@ -125,10 +132,11 @@ body {
 
 .dots::after {
     content: '.....';
-    /*Defaultcontent*/display: inline-block;
+    display: inline-block;
     animation: dot-flash 1.5s infinite steps(5);
 }
 
+/* Water Wave Animation */
 @keyframes water-wave {
     0% {
         transform: scale(0.8);
@@ -156,4 +164,3 @@ body {
     border-radius: 50%;
     animation: water-wave 2s infinite ease-out;
 }
-

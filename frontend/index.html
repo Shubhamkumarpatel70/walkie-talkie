@@ -7,82 +7,47 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-gray-900 text-white flex">
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center min-h-screen p-6">
 
-    <!-- Sidebar -->
-    <nav id="sidebar" class="fixed inset-y-0 left-0 bg-gray-800 w-full sm:w-64 transform -translate-x-full transition-transform duration-300 shadow-lg z-50">
-        <div class="flex items-center justify-between h-16 border-b border-gray-700 px-4">
-            <h2 class="text-xl font-bold">Menu</h2>
-            <button id="closeBtn" class="text-white hover:text-gray-400" aria-label="Close sidebar">✖</button>
-        </div>
-        <ul class="p-4 space-y-2">
-            <li><a href="#" id="myFriendsLink" class="block py-2 px-4 hover:bg-gray-700 rounded-md">My Friends</a></li>
-            <li><a href="#" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Search Friends</a></li>
-            <li><a href="#" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Recently Joined</a></li>
-            <li><a href="#" id="joinTalkieBtn" class="block py-2 px-4 hover:bg-gray-700 rounded-md">Join Talkie</a></li>
-            <li><a href="#" id="myTalkieRoomBtn" class="block py-2 px-4 hover:bg-gray-700 rounded-md">My Talkie Room</a></li>
-            <li><a href="#" id="leaveTalkieBtn" class="block py-2 px-4 hover:bg-red-700 rounded-md">Leave Talkie</a></li>
-        </ul>
-    </nav>
+    <!-- App Title -->
+    <h1 class="text-4xl font-bold mb-4 text-center">🔊 Walkie-Talkie</h1>
 
-    <!-- Overlay for Sidebar -->
-    <div id="overlay" class="fixed inset-0 bg-black opacity-50 hidden transition-opacity duration-300 z-40"></div>
+    <!-- Connection Status -->
+    <div id="status" class="text-yellow-400 mb-4 text-center text-lg font-semibold">
+        Connecting<span class="dots"></span>
+    </div>
+    
+    <!-- Walkie-Talkie Main Container -->
+    <section id="mainContainer" class="bg-gray-800 rounded-lg p-6 shadow-md w-full max-w-lg">
+        <input id="username" type="text" placeholder="Enter your username" 
+            class="px-4 py-2 text-black rounded-md mb-4 w-full text-center focus:ring-2 focus:ring-blue-400 outline-none"
+            aria-label="Username">
 
-    <!-- Main Content -->
-    <div class="flex-1 flex flex-col items-center justify-center p-6 sm:p-10 relative">
-        <!-- Sidebar Toggle Button -->
-        <button id="toggleBtn" class="absolute top-4 left-4 bg-gray-700 px-4 py-2 rounded shadow-md hover:bg-gray-600 transition">
-            ☰
+        <button id="connectBtn" class="px-6 py-2 bg-green-500 text-white rounded-lg w-full hover:bg-green-600 transition">
+            Connect
         </button>
 
-        <!-- App Title -->
-        <h1 class="text-4xl font-bold mb-4 text-center">🔊 Walkie-Talkie</h1>
-
-        <!-- Connection Status -->
-        <div id="status" class="text-yellow-400 mb-4 text-center text-lg font-semibold">
-            Connecting<span class="dots"></span>
-        </div>
-        
-        <!-- Walkie-Talkie Main Container -->
-        <section id="mainContainer" class="bg-gray-800 rounded-lg p-6 shadow-md w-full max-w-lg">
-            <input id="username" type="text" placeholder="Enter your username" 
-                class="px-4 py-2 text-black rounded-md mb-4 w-full text-center focus:ring-2 focus:ring-blue-400 outline-none"
-                aria-label="Username">
-
-            <button id="connectBtn" class="px-6 py-2 bg-green-500 text-white rounded-lg w-full hover:bg-green-600 transition">
-                Connect
+        <!-- Talk Button Container (Hidden Initially) -->
+        <div id="talk-container" class="hidden mt-6 text-center">
+            <div id="talkStatus" class="text-yellow-400 text-lg font-semibold">Hold to Talk</div>
+            <button id="talkBtn" class="px-6 py-3 bg-blue-500 rounded-lg text-white text-lg font-semibold hover:bg-blue-600 transition mt-3">
+                🎤 Hold to Talk
             </button>
+        </div>
 
-            <!-- Talk Button Container (Hidden Initially) -->
-            <div id="talk-container" class="hidden mt-6 text-center">
-                <div id="talkStatus" class="text-yellow-400 text-lg font-semibold">Hold to Talk</div>
-                <button id="talkBtn" class="px-6 py-3 bg-blue-500 rounded-lg text-white text-lg font-semibold hover:bg-blue-600 transition mt-3">
-                    🎤 Hold to Talk
-                </button>
+        <!-- Recently Joined Users -->
+        <h2 class="text-xl font-semibold mt-8 text-center">Recently Joined</h2>
+        <div class="mt-4 w-full max-w-lg">
+            <div class="flex justify-between bg-gray-700 px-4 py-2 rounded-t-lg text-white font-semibold">
+                <span>UserName</span>
+                <span>Status</span>
+                <span>Action</span>
             </div>
-
-            <!-- Recently Joined Users -->
-            <h2 class="text-xl font-semibold mt-8 text-center">Recently Joined</h2>
-            <div class="mt-4 w-full max-w-lg">
-                <div class="flex justify-between bg-gray-700 px-4 py-2 rounded-t-lg text-white font-semibold">
-                    <span>UserName</span>
-                    <span>Status</span>
-                    <span>Action</span>
-                </div>
-                <ul id="recentlyJoined" class="divide-y divide-gray-600">
-                    <!-- Users will be dynamically added -->
-                </ul>
-            </div>
-        </section>
-
-        <!-- Friends List (Hidden Initially) -->
-        <section id="friendsList" class="hidden mt-8 text-center w-full max-w-lg">
-            <h2 class="text-xl font-semibold">My Friends</h2>
-            <ul id="myFriends" class="mt-4 space-y-2">
-                <!-- Friends will be listed here -->
+            <ul id="recentlyJoined" class="divide-y divide-gray-600">
+                <!-- Users will be dynamically added -->
             </ul>
-        </section>
-    </div>
+        </div>
+    </section>
 
     <audio id="beepSound" src="audio/badoop.mp3" preload="auto"></audio>
     <audio id="talkieSound" src="audio/connection_lost.mp3" preload="auto"></audio>

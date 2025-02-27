@@ -9,7 +9,6 @@ const talkieSound = document.getElementById("talkieSound");
 const connectSound = document.getElementById("connectSound");
 
 // Sidebar Elements
-const toggleBtn = document.getElementById("toggleBtn");
 const sidebar = document.getElementById("sidebar");
 const overlay = document.getElementById("overlay");
 const closeBtn = document.getElementById("closeBtn");
@@ -86,7 +85,7 @@ function addUserToRecentlyJoined(user) {
         </span>
         <button class="talkBtn bg-blue-500 px-3 py-1 rounded text-white text-sm hover:bg-blue-600 transition"
             data-username="${user.username}" ${!user.online ? 'disabled' : ''}>
-            Talk
+            Ring
         </button>
     `;
 
@@ -165,37 +164,42 @@ function connectToServer() {
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
-            switch (data.type) {
-                case "audio":
-                    if (data.to === username || !data.to) {
-                        playAudio(data.audio);
-                    }
-                    break;
-                case "user_joined":
-                    addUserToRecentlyJoined({ username: data.username, online: true });
-                    break;
-                case "user_left":
-                    removeUserFromRecentlyJoined(data.username);
-                    break;
-                case "user_list":
-                    if (Array.isArray(data.users)) {
-                        recentlyJoinedList.innerHTML = "";
-                        data.users.forEach(user => addUserToRecentlyJoined({ username: user, online: true }));
-                    }
-                    break;
-                case "ring":
-                    if (data.to === username) playBeepSound();
-                    break;
-                case "recording":
-                    handleRecordingStatus(data.username, data.status);
-                    break;
-                default:
-                    console.warn("Unknown message type:", data);
-            }
+            handleWebSocketMessage(data);
         } catch (error) {
             console.error("Error parsing message:", error);
         }
     };
+}
+
+// Handle WebSocket Messages
+function handleWebSocketMessage(data) {
+    switch (data.type) {
+        case "audio":
+            if (data.to === username || !data.to) {
+                playAudio(data.audio);
+            }
+            break;
+        case "user_joined":
+            addUserToRecentlyJoined({ username: data.username, online: true });
+            break;
+        case "user_left":
+            removeUserFromRecentlyJoined(data.username);
+            break;
+        case "user_list":
+            if (Array.isArray(data.users)) {
+                recentlyJoinedList.innerHTML = "";
+                data.users.forEach(user => addUserToRecentlyJoined({ username: user, online: true }));
+            }
+            break;
+        case "ring":
+            if (data.to === username) playBeepSound();
+            break;
+        case "recording":
+            handleRecordingStatus(data.username, data.status);
+            break;
+        default:
+            console.warn("Unknown message type:", data);
+    }
 }
 
 // Connect Button Click Handler
@@ -210,7 +214,7 @@ connectBtn.addEventListener("click", () => {
     }).then(() => {
         playConnectSound();
         connectToServer();
-    });
+    }).catch(error => console.error("Error saving username:", error));
 });
 
 function updateUIOnConnect() {
