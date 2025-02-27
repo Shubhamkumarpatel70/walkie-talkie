@@ -18,7 +18,11 @@ connectBtn.addEventListener("click", () => {
 });
 
 function connectToServer() {
-    ws = new WebSocket("ws://localhost:8080"); // Use the appropriate server URL
+    const ws = new WebSocket(
+        window.location.hostname === "localhost"
+          ? "ws://localhost:8080"
+          : "wss://walkie-talkie-3i76.onrender.com"
+      );      
 
     ws.onopen = () => {
         ws.send(JSON.stringify({ type: "join", username }));

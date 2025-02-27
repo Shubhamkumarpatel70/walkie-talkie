@@ -2,22 +2,23 @@ const WebSocket = require("ws");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
+
 const app = express();
-const wss = new WebSocket.Server({ port: 8080 });
+const PORT = process.env.PORT || 8080; // Use dynamic port for deployment
 
 let clients = {}; // Store WebSocket connections by username
 let onlineUsers = []; // Array to track online users
-const userFilePath = path.join(__dirname, 'data', 'userrequest.json'); // Path to user request JSON file
+const userFilePath = path.join(__dirname, "data", "userrequest.json"); // Path to user request JSON file
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend'))); // Serve static files from the frontend directory
+app.use(express.static(path.join(__dirname, "../frontend"))); // Serve static files from frontend
 
 // Load existing users from userrequest.json
 function loadUsers() {
     if (fs.existsSync(userFilePath)) {
         const data = fs.readFileSync(userFilePath);
         onlineUsers = JSON.parse(data);
-        onlineUsers.forEach(user => {
+        onlineUsers.forEach((user) => {
             clients[user] = null; // Initialize client entries for loaded users
         });
     }
@@ -29,10 +30,10 @@ function saveUsers() {
 }
 
 // Endpoint to save username
-app.post('/save-username', (req, res) => {
+app.post("/save-username", (req, res) => {
     const { username } = req.body;
     if (!username) {
-        return res.status(400).json({ error: 'Username is required' });
+        return res.status(400).json({ error: "Username is required" });
     }
 
     if (!onlineUsers.includes(username)) {
@@ -40,22 +41,35 @@ app.post('/save-username', (req, res) => {
         saveUsers();
     }
 
-    res.json({ message: 'Username saved successfully' });
+    res.json({ message: "Username saved successfully" });
 });
 
 // Endpoint to get the list of recently joined users
-app.get('/recently-joined', (req, res) => {
+app.get("/recently-joined", (req, res) => {
     res.json(onlineUsers);
 });
 
 // Serve the index.html file for the root URL
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "../frontend/index.html"));
 });
+
+// Start the Express server
+const server = app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(
+        `WebSocket server running on ${
+            process.env.PORT ? `wss://walkie-talkie-3i76.onrender.com` : `ws://localhost:${PORT}`
+        }`
+    );
+});
+
+// Attach WebSocket to the existing Express server
+const wss = new WebSocket.Server({ server, path: "/ws" });
 
 // Broadcast function to send messages to all clients except the sender
 function broadcast(data, sender) {
-    Object.keys(clients).forEach(user => {
+    Object.keys(clients).forEach((user) => {
         if (clients[user]?.readyState === WebSocket.OPEN && user !== sender) {
             clients[user].send(JSON.stringify(data));
         }
@@ -72,10 +86,12 @@ wss.on("connection", (ws) => {
             // Handle user joining
             if (data.type === "join") {
                 username = data.username; // Store username for the session
-                
+
                 if (clients[username]) {
                     // If username already exists, reject the connection
-                    ws.send(JSON.stringify({ type: "error", message: "Username already taken." }));
+                    ws.send(
+                        JSON.stringify({ type: "error", message: "Username already taken." })
+                    );
                     ws.close();
                     return;
                 }
@@ -108,7 +124,7 @@ wss.on("connection", (ws) => {
     ws.on("close", (event) => {
         if (username) {
             delete clients[username]; // Remove the user from the clients list
-            onlineUsers = onlineUsers.filter(user => user !== username); // Remove user from online users
+            onlineUsers = onlineUsers.filter((user) => user !== username); // Remove user from online users
             console.log(`${username} disconnected: ${event.reason}`);
 
             // Save the updated online users list to the JSON file
@@ -127,11 +143,3 @@ wss.on("connection", (ws) => {
 
 // Load users when the server starts
 loadUsers();
-
-// Start the Express server
-const port = 3000;
-app.listen(port, () => {
-    console.log(`Express server running on http://localhost:${port}`);
-});
-
-console.log("WebSocket server running on ws://localhost:8080");

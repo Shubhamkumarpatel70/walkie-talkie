@@ -134,7 +134,7 @@
         }
 
         function connectToServer(username) {
-            const ws = new WebSocket("ws://localhost:8080"); // Adjust URL if needed
+            const ws = new WebSocket("wss://walkie-talkie-3i76.onrender.com");
 
             ws.onopen = () => {
                 ws.send(JSON.stringify({ type: "join", username }));
@@ -249,6 +249,5 @@
             }
         });
     </script>
-    
 </body>
 </html>
