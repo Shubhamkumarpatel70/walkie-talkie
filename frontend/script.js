@@ -27,7 +27,7 @@ function sendRingRequest(targetUsername) {
     if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "ring", from: username, to: targetUsername }));
     } else {
-        console.warn("WebSocket is not connected. Cannot send ring request.");
+        console.warn("WebSocket not connected. Cannot send ring request.");
     }
 }
 
@@ -45,35 +45,38 @@ function stopConnectingDots() {
     clearInterval(connectingInterval);
 }
 
-// Update Recently Joined Users
-function updateRecentlyJoined(users) {
-    recentlyJoinedList.innerHTML = "";
+// Add User to Recently Joined
+function addUserToRecentlyJoined(user) {
+    if (!user || !user.username) return;
 
-    users.forEach(user => {
-        if (!user || !user.username) return;
+    if ([...recentlyJoinedList.children].some(li => li.dataset.username === user.username)) return;
 
-        if ([...recentlyJoinedList.children].some(li => li.dataset.username === user.username)) return;
+    const li = document.createElement("li");
+    li.className = "flex justify-between items-center px-4 py-2 bg-gray-800 rounded-md";
+    li.dataset.username = user.username;
+    li.innerHTML = `
+        <span class="font-medium">${user.username}</span>
+        <span class="${user.online ? 'text-green-400' : 'text-red-400'}">
+            ${user.online ? "Online ✅" : "Offline ❌"}
+        </span>
+        <button class="talkBtn bg-blue-500 px-3 py-1 rounded text-white text-sm hover:bg-blue-600 transition"
+            data-username="${user.username}" ${!user.online ? 'disabled' : ''}>
+            Talk
+        </button>
+    `;
 
-        const li = document.createElement("li");
-        li.className = "flex justify-between items-center px-4 py-2 bg-gray-800 rounded-md";
-        li.dataset.username = user.username;
-        li.innerHTML = `
-            <span class="font-medium">${user.username}</span>
-            <span class="${user.online ? 'text-green-400' : 'text-red-400'}">
-                ${user.online ? "Online ✅" : "Offline ❌"}
-            </span>
-            <button class="talkBtn bg-blue-500 px-3 py-1 rounded text-white text-sm hover:bg-blue-600 transition"
-                data-username="${user.username}" ${!user.online ? 'disabled' : ''}>
-                Talk
-            </button>
-        `;
-
-        recentlyJoinedList.appendChild(li);
-
-        li.querySelector(".talkBtn").addEventListener("click", () => {
-            sendRingRequest(user.username);
-        });
+    recentlyJoinedList.appendChild(li);
+    li.querySelector(".talkBtn").addEventListener("click", () => {
+        sendRingRequest(user.username);
     });
+}
+
+// Remove User from Recently Joined
+function removeUserFromRecentlyJoined(username) {
+    const userElement = recentlyJoinedList.querySelector(`[data-username="${username}"]`);
+    if (userElement) {
+        userElement.remove();
+    }
 }
 
 // Handle Recording Status
@@ -94,12 +97,12 @@ async function fetchRecentlyJoined() {
     try {
         const response = await fetch("/get-users");
         const data = await response.json();
-
         if (data.users && Array.isArray(data.users)) {
-            updateRecentlyJoined(data.users.map(user => ({ username: user, online: true })));
+            recentlyJoinedList.innerHTML = "";
+            data.users.forEach(user => addUserToRecentlyJoined({ username: user, online: true }));
         }
     } catch (error) {
-        console.error("Error fetching recently joined users:", error);
+        console.error("Error fetching users:", error);
     }
 }
 
@@ -132,9 +135,7 @@ function connectToServer() {
         reconnectTimeout = setTimeout(connectToServer, 5000);
     };
 
-    ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-    };
+    ws.onerror = (error) => console.error("WebSocket error:", error);
 
     ws.onmessage = (event) => {
         try {
@@ -143,22 +144,20 @@ function connectToServer() {
                 case "audio":
                     playAudio(data.audio);
                     break;
-                    case "user_joined":
-                        updateRecentlyJoined([{ username: data.username, online: true }]);
-                        break;
-                    
+                case "user_joined":
+                    addUserToRecentlyJoined({ username: data.username, online: true });
+                    break;
                 case "user_left":
                     removeUserFromRecentlyJoined(data.username);
                     break;
                 case "user_list":
                     if (Array.isArray(data.users)) {
-                        updateRecentlyJoined(data.users.filter(u => u?.username));
+                        recentlyJoinedList.innerHTML = "";
+                        data.users.forEach(user => addUserToRecentlyJoined({ username: user, online: true }));
                     }
                     break;
                 case "ring":
-                    if (data.to === username) {
-                        playBeepSound();
-                    }
+                    if (data.to === username) playBeepSound();
                     break;
                 case "recording":
                     handleRecordingStatus(data.username, data.status);
@@ -175,10 +174,7 @@ function connectToServer() {
 // Connect Button Click Handler
 connectBtn.addEventListener("click", () => {
     username = usernameInput.value.trim();
-    if (!username) {
-        alert("Please enter a username");
-        return;
-    }
+    if (!username) return alert("Please enter a username");
     
     fetch('/save-username', {
         method: 'POST',
@@ -196,43 +192,42 @@ function updateUIOnConnect() {
     localStorage.setItem("username", username);
 }
 
-// Handle Talk Button (Start Recording)
+// Handle Audio Sending
+function sendAudio(blob) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return console.warn("WebSocket not connected.");
+    const reader = new FileReader();
+    reader.readAsDataURL(blob);
+    reader.onloadend = () => {
+        ws.send(JSON.stringify({ type: "audio", audio: reader.result, username }));
+    };
+}
+
+// Start Recording
 talkBtn.addEventListener("mousedown", async () => {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
 
-        mediaRecorder.ondataavailable = (event) => {
-            audioChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-            sendAudio(audioBlob);
-        };
+        mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+        mediaRecorder.onstop = () => sendAudio(new Blob(audioChunks, { type: "audio/webm" }));
 
         mediaRecorder.start();
         talkBtn.textContent = "Recording... 🎤";
         talkBtn.classList.add("bg-red-500");
-
         ws.send(JSON.stringify({ type: "recording", username, status: true }));
 
     } catch (error) {
-        console.error("Microphone access error:", error);
         alert("Microphone access is required.");
     }
 });
 
-// Handle Talk Button Release (Stop Recording)
+// Stop Recording
 talkBtn.addEventListener("mouseup", () => {
-    if (mediaRecorder?.state === "recording") {
-        mediaRecorder.stop();
-        talkBtn.textContent = "🎤 Hold to Talk";
-        talkBtn.classList.remove("bg-red-500");
-
-        ws.send(JSON.stringify({ type: "recording", username, status: false }));
-    }
+    if (mediaRecorder?.state === "recording") mediaRecorder.stop();
+    talkBtn.textContent = "🎤 Hold to Talk";
+    talkBtn.classList.remove("bg-red-500");
+    ws.send(JSON.stringify({ type: "recording", username, status: false }));
 });
 
 // Sidebar Toggle
@@ -240,9 +235,3 @@ talkBtn.addEventListener("mouseup", () => {
     sidebar.classList.toggle("-translate-x-full");
     overlay.classList.toggle("hidden");
 }));
-
-window.addEventListener("load", () => {
-    const storedUsername = localStorage.getItem("username");
-    if (storedUsername) usernameInput.value = storedUsername;
-    fetchRecentlyJoined();
-});
