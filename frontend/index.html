@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walkie-Talkie</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-gray-900 text-white flex">
+
+    <!-- Sidebar -->
+    <div id="sidebar" class="fixed inset-y-0 left-0 bg-gray-800 w-64 transform -translate-x-full transition-transform duration-300">
+        <div class="flex items-center justify-between h-16 border-b border-gray-700 px-4">
+            <h2 class="text-xl font-bold">Menu</h2>
+            <button id="closeBtn" class="text-white hover:text-gray-400" aria-label="Close sidebar">✖</button>
+        </div>
+        <ul class="p-4">
+            <li><a href="#" id="myFriendsLink" class="block py-2 px-4 hover:bg-gray-700">My Friends</a></li>
+            <li><a href="#" class="block py-2 px-4 hover:bg-gray-700">Search Friends</a></li>
+            <li><a href="#" class="block py-2 px-4 hover:bg-gray-700">Recently Joined</a></li>
+        </ul>
+    </div>
+
+    <!-- Overlay for Sidebar -->
+    <div id="overlay" class="fixed inset-0 bg-black opacity-50 hidden"></div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col items-center justify-center p-10">
+        <button id="toggleBtn" class="absolute top-4 right-4 bg-gray-700 px-4 py-2 rounded shadow-md hover:bg-gray-600 transition" aria-label="Toggle sidebar">☰</button>
+        <h1 class="text-4xl font-bold mb-4 text-center">🔊 Walkie-Talkie</h1>
+        <div id="status" class="text-yellow-400 mb-4 text-center">Connecting...</div>
+
+        <div id="mainContainer" class="bg-gray-800 rounded-lg p-6 shadow-md w-full max-w-md">
+            <input id="username" type="text" placeholder="Enter your username" class="px-4 py-2 text-black rounded-md mb-3 w-full text-center" aria-label="Username">
+            <button id="connectBtn" class="px-6 py-2 bg-green-500 text-white rounded-lg w-full hover:bg-green-600 transition">Connect</button>
+
+            <div id="talk-container" class="hidden mt-4">
+                <div id="talkStatus" class="text-yellow-400">Hold to Talk</div>
+                <button id="talkBtn" class="px-6 py-3 bg-blue-500 rounded-lg text-white text-lg font-semibold hover:bg-blue-600 transition">
+                    🎤 Hold to Talk
+                </button>
+            </div>
+
+            <h2 class="text-xl font-semibold mt-8 text-center">Recently Joined</h2>
+            <ul id="recentlyJoined" class="mt-4 space-y-2 w-full max-w-md">
+                <!-- Dynamically populated with JS -->
+            </ul>
+        </div>
+
+        <div id="friendsList" class="hidden mt-8">
+            <h2 class="text-xl font-semibold text-center">My Friends</h2>
+            <ul id="myFriends" class="mt-4 space-y-2 w-full max-w-md">
+                <!-- Friends will be listed here -->
+            </ul>
+        </div>
+    </div>
+
+    <audio id="beepSound" src="audio/badoop.mp3" preload="auto"></audio>
+
+    <script src="script.js"></script>
+
+    <script>
+        const toggleBtn = document.getElementById("toggleBtn");
+        const sidebar = document.getElementById("sidebar");
+        const overlay = document.getElementById("overlay");
+        const closeBtn = document.getElementById("closeBtn");
+        const recentlyJoinedList = document.getElementById("recentlyJoined");
+        const talkStatus = document.getElementById("talkStatus");
+        const beepSound = document.getElementById("beepSound");
+        const status = document.getElementById("status");
+        const connectBtn = document.getElementById("connectBtn");
+        const usernameInput = document.getElementById("username");
+        const talkContainer = document.getElementById("talk-container");
+
+        // Function to update recently joined users list
+        function updateRecentlyJoined(users) {
+            recentlyJoinedList.innerHTML = '';
+            users.forEach(user => {
+                const li = document.createElement('li');
+                li.className = "flex items-center justify-between p-2 bg-gray-800 rounded-md";
+                li.innerHTML = `
+                    <span>${user.username} - ${user.connected ? 'Connected' : 'Offline'}</span>
+                    <span class="flex items-center">
+                        <span class="dot ${user.online ? 'online' : 'offline'}"></span>
+                        <button class="talkBtn bg-blue-500 px-2 py-1 rounded ml-2" data-username="${user.username}" ${!user.online ? 'disabled' : ''}>Talk</button>
+                    </span>
+                `;
+                recentlyJoinedList.appendChild(li);
+
+                // Add event listener to the "Talk" button
+                const talkBtn = li.querySelector('.talkBtn');
+                talkBtn.addEventListener('click', () => {
+                    playBeepSound(); // Play beep sound when Talk button is clicked
+                });
+            });
+        }
+
+        // Function to play the beep sound
+        function playBeepSound() {
+            beepSound.play();
+        }
+
+        // Add event listener for connecting users
+        connectBtn.addEventListener("click", () => {
+            const usernameInputValue = usernameInput.value.trim();
+            if (!usernameInputValue) {
+                alert("Please enter a username");
+                return;
+            }
+
+            // Save username to server
+            saveUsername(usernameInputValue);
+
+            // Connect to WebSocket server
+            connectToServer(usernameInputValue);
+        });
+
+        function saveUsername(username) {
+            fetch('/save-username', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ username })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Username saved:', data);
+            })
+            .catch(error => {
+                console.error('Error saving username:', error);
+            });
+        }
+
+        function connectToServer(username) {
+            const ws = new WebSocket("ws://localhost:8080"); // Adjust URL if needed
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: "join", username }));
+                updateUIOnConnect(username);
+            };
+
+            ws.onclose = () => {
+                updateUIOnDisconnect();
+            };
+
+            ws.onmessage = (event) => {
+                handleServerMessage(event.data);
+            };
+        }
+
+        function updateUIOnConnect(username) {
+            status.textContent = `Connected as ${username} ✅`;
+            status.classList.replace("text-yellow-400", "text-green-400");
+            connectBtn.style.display = "none";
+            usernameInput.style.display = "none";
+            talkContainer.classList.remove("hidden");
+        }
+
+        function updateUIOnDisconnect() {
+            status.textContent = "Disconnected ❌";
+            status.classList.replace("text-green-400", "text-red-400");
+        }
+
+        function handleServerMessage(data) {
+            const message = JSON.parse(data);
+            switch (message.type) {
+                case "audio":
+                    playAudio(message.audio);
+                    break;
+                case "user_joined":
+                    addUserToRecentlyJoined(message.username);
+                    break;
+                case "user_left":
+                    removeUserFromRecentlyJoined(message.username);
+                    break;
+                case "user_list":
+                    updateRecentlyJoinedList(message.users);
+                    break;
+            }
+        }
+
+        function playAudio(audioData) {
+            const audio = new Audio(audioData);
+            audio.play();
+        }
+
+        // Functions to update the UI for user joins and leaves
+        function addUserToRecentlyJoined(username) {
+            const li = document.createElement('li');
+            li.className = "flex items-center justify-between p-2 bg-gray-800 rounded-md";
+            li.innerHTML = `
+                <span>${username} - Connected</span>
+                <span class="flex items-center">
+                    <span class="dot online"></span>
+                    <button class="talkBtn bg-blue-500 px-2 py-1 rounded ml-2" data-username="${username}">Talk</button>
+                </span>
+            `;
+            recentlyJoinedList.appendChild(li);
+
+            // Add event listener to the "Talk" button
+            const talkBtn = li.querySelector('.talkBtn');
+            talkBtn.addEventListener('click', () => {
+                playBeepSound(); // Play beep sound when the Talk button is clicked
+            });
+        }
+
+        function removeUserFromRecentlyJoined(username) {
+            const listItems = recentlyJoinedList.querySelectorAll('li');
+            listItems.forEach(item => {
+                if (item.textContent.includes(username)) {
+                    recentlyJoinedList.removeChild(item);
+                }
+            });
+        }
+
+        function updateRecentlyJoinedList(users) {
+            recentlyJoinedList.innerHTML = ''; // Clear the current list
+            users.forEach(user => {
+                addUserToRecentlyJoined(user.username); // Assuming user object has username property
+            });
+        }
+
+        // Initialize sidebar and overlay functionality
+        toggleBtn.addEventListener("click", () => {
+            sidebar.classList.toggle("-translate-x-full");
+            sidebar.classList.toggle("translate-x-0");
+            overlay.classList.toggle("hidden");
+        });
+
+        closeBtn.addEventListener("click", () => {
+            sidebar.classList.add("-translate-x-full");
+            sidebar.classList.remove("translate-x-0");
+            overlay.classList.add("hidden");
+        });
+
+        overlay.addEventListener("click", () => {
+            sidebar.classList.add("-translate-x-full");
+            sidebar.classList.remove("translate-x-0");
+            overlay.classList.add("hidden");
+        });
+
+        // Load recently joined users from localStorage on page load
+        window.addEventListener('load', () => {
+            const storedUsername = localStorage.getItem('username');
+            if (storedUsername) {
+                document.getElementById("username").value = storedUsername;
+            }
+        });
+    </script>
+    
+</body>
+</html>
