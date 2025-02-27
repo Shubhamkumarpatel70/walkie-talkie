@@ -155,7 +155,7 @@ wss.on("connection", (ws) => {
                 // After a short delay, reset the user's status
                 setTimeout(() => {
                     broadcast({ type: "recording", username, status: false });
-                }, 3000);
+                }, 1000);
             }
 
             // Handle "ring" event

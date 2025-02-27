@@ -12,7 +12,13 @@ const sidebar = document.getElementById("sidebar");
 const overlay = document.getElementById("overlay");
 const closeBtn = document.getElementById("closeBtn");
 
-let ws, mediaRecorder, audioChunks = [], username = "", reconnectTimeout, connectingInterval;
+let ws, mediaRecorder, audioChunks = [], username = "", reconnectTimeout, connectingInterval, activeChatUser = null;
+
+// Play Incoming Audio Message
+function playAudio(audioBase64) {
+    const audio = new Audio(audioBase64);
+    audio.play().catch(err => console.warn("Audio play error:", err));
+}
 
 // Play Beep Sound on Receiver's Device
 function playBeepSound() {
@@ -26,6 +32,7 @@ function playBeepSound() {
 function sendRingRequest(targetUsername) {
     if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "ring", from: username, to: targetUsername }));
+        activeChatUser = targetUsername;
     } else {
         console.warn("WebSocket not connected. Cannot send ring request.");
     }
@@ -57,7 +64,7 @@ function addUserToRecentlyJoined(user) {
     li.innerHTML = `
         <span class="font-medium">${user.username}</span>
         <span class="${user.online ? 'text-green-400' : 'text-red-400'}">
-            ${user.online ? "Online ✅" : "Offline ❌"}
+            ${user.online ? "Online" : "Offline"}
         </span>
         <button class="talkBtn bg-blue-500 px-3 py-1 rounded text-white text-sm hover:bg-blue-600 transition"
             data-username="${user.username}" ${!user.online ? 'disabled' : ''}>
@@ -85,7 +92,7 @@ function handleRecordingStatus(user, isRecording) {
     if (userElement) {
         const statusText = userElement.querySelector("span:nth-child(2)");
         if (statusText) {
-            statusText.textContent = isRecording ? "Recording... 🎤" : "Online ✅";
+            statusText.textContent = isRecording ? "Recording... 🎤" : "Online";
             statusText.classList.toggle("text-yellow-400", isRecording);
             statusText.classList.toggle("text-green-400", !isRecording);
         }
@@ -142,7 +149,9 @@ function connectToServer() {
             const data = JSON.parse(event.data);
             switch (data.type) {
                 case "audio":
-                    playAudio(data.audio);
+                    if (data.to === username || !data.to) {
+                        playAudio(data.audio);
+                    }
                     break;
                 case "user_joined":
                     addUserToRecentlyJoined({ username: data.username, online: true });
@@ -192,13 +201,13 @@ function updateUIOnConnect() {
     localStorage.setItem("username", username);
 }
 
-// Handle Audio Sending
+// Handle Audio Sending with Personal Chat Feature
 function sendAudio(blob) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return console.warn("WebSocket not connected.");
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = () => {
-        ws.send(JSON.stringify({ type: "audio", audio: reader.result, username }));
+        ws.send(JSON.stringify({ type: "audio", audio: reader.result, from: username, to: activeChatUser }));
     };
 }
 
@@ -215,7 +224,6 @@ talkBtn.addEventListener("mousedown", async () => {
         mediaRecorder.start();
         talkBtn.textContent = "Recording... 🎤";
         talkBtn.classList.add("bg-red-500");
-        ws.send(JSON.stringify({ type: "recording", username, status: true }));
 
     } catch (error) {
         alert("Microphone access is required.");
@@ -227,11 +235,5 @@ talkBtn.addEventListener("mouseup", () => {
     if (mediaRecorder?.state === "recording") mediaRecorder.stop();
     talkBtn.textContent = "🎤 Hold to Talk";
     talkBtn.classList.remove("bg-red-500");
-    ws.send(JSON.stringify({ type: "recording", username, status: false }));
 });
 
-// Sidebar Toggle
-[toggleBtn, closeBtn, overlay].forEach(el => el.addEventListener("click", () => {
-    sidebar.classList.toggle("-translate-x-full");
-    overlay.classList.toggle("hidden");
-}));
