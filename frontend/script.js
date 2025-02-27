@@ -143,9 +143,10 @@ function connectToServer() {
                 case "audio":
                     playAudio(data.audio);
                     break;
-                case "user_joined":
-                    addUserToRecentlyJoined(data.username);
-                    break;
+                    case "user_joined":
+                        updateRecentlyJoined([{ username: data.username, online: true }]);
+                        break;
+                    
                 case "user_left":
                     removeUserFromRecentlyJoined(data.username);
                     break;
